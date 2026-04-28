@@ -10,6 +10,16 @@ public enum TypingEvent: Equatable, Sendable {
     case cursorMoved
 }
 
+public struct LastTypedWord: Equatable, Sendable {
+    public let word: String
+    public let trailingSuffix: String
+
+    public init(word: String, trailingSuffix: String) {
+        self.word = word
+        self.trailingSuffix = trailingSuffix
+    }
+}
+
 public struct TypingBuffer: Equatable, Sendable {
     private static let maximumPhraseLength = 500
 
@@ -19,6 +29,36 @@ public struct TypingBuffer: Equatable, Sendable {
     public init(currentWord: String = "", currentPhrase: String = "") {
         self.currentWord = currentWord
         self.currentPhrase = currentPhrase
+    }
+
+    public var currentOrLastWord: LastTypedWord? {
+        if !currentWord.isEmpty {
+            return LastTypedWord(word: currentWord, trailingSuffix: "")
+        }
+
+        let characters = Array(currentPhrase)
+        guard !characters.isEmpty else {
+            return nil
+        }
+
+        var suffixStart = characters.count
+        while suffixStart > 0, !characters[suffixStart - 1].isTypingWordCharacter {
+            suffixStart -= 1
+        }
+
+        var wordStart = suffixStart
+        while wordStart > 0, characters[wordStart - 1].isTypingWordCharacter {
+            wordStart -= 1
+        }
+
+        guard wordStart < suffixStart else {
+            return nil
+        }
+
+        return LastTypedWord(
+            word: String(characters[wordStart..<suffixStart]),
+            trailingSuffix: String(characters[suffixStart..<characters.count])
+        )
     }
 
     public mutating func record(_ event: TypingEvent) -> String? {
@@ -66,6 +106,13 @@ public struct TypingBuffer: Equatable, Sendable {
         currentPhrase = replacement
         currentWord = Self.trailingWord(in: replacement)
         trimPhraseIfNeeded()
+    }
+
+    public mutating func replaceLastTypedWord(_ lastTypedWord: LastTypedWord, with replacement: String) {
+        replaceTrailingText(
+            characterCount: lastTypedWord.word.count + lastTypedWord.trailingSuffix.count,
+            with: replacement + lastTypedWord.trailingSuffix
+        )
     }
 
     public mutating func replaceTrailingText(characterCount: Int, with replacement: String) {

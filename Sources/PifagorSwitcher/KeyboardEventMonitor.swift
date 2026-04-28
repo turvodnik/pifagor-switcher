@@ -10,6 +10,7 @@ final class KeyboardEventMonitor {
     private var runLoopSource: CFRunLoopSource?
     private var lastControlTapTime: CFTimeInterval = 0
     private var lastShiftTapTime: CFTimeInterval = 0
+    private var lastOptionTapTime: CFTimeInterval = 0
     private(set) var lastStartFailure: String?
 
     var isRunning: Bool {
@@ -191,7 +192,7 @@ final class KeyboardEventMonitor {
     private func handleFlagsChanged(_ event: CGEvent) {
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         guard keyCode == kVK_Control || keyCode == kVK_RightControl else {
-            handleShiftFlagsChanged(event)
+            handleShiftOrOptionFlagsChanged(event)
             return
         }
 
@@ -214,9 +215,10 @@ final class KeyboardEventMonitor {
         }
     }
 
-    private func handleShiftFlagsChanged(_ event: CGEvent) {
+    private func handleShiftOrOptionFlagsChanged(_ event: CGEvent) {
         let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
         guard keyCode == kVK_Shift || keyCode == kVK_RightShift else {
+            handleOptionFlagsChanged(event)
             return
         }
 
@@ -236,6 +238,31 @@ final class KeyboardEventMonitor {
         if now - lastShiftTapTime < 0.35 {
             dispatch(.manualCorrectSelection)
             lastShiftTapTime = 0
+        }
+    }
+
+    private func handleOptionFlagsChanged(_ event: CGEvent) {
+        let keyCode = Int(event.getIntegerValueField(.keyboardEventKeycode))
+        guard keyCode == kVK_Option || keyCode == kVK_RightOption else {
+            return
+        }
+
+        let flags = event.flags
+        let optionOnly = flags.contains(.maskAlternate)
+            && !flags.contains(.maskCommand)
+            && !flags.contains(.maskControl)
+            && !flags.contains(.maskShift)
+
+        guard optionOnly else {
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        defer { lastOptionTapTime = now }
+
+        if now - lastOptionTapTime < 0.35 {
+            dispatch(.manualCorrectLastWord)
+            lastOptionTapTime = 0
         }
     }
 }

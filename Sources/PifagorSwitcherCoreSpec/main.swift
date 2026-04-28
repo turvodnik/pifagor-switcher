@@ -247,6 +247,22 @@ struct PifagorSwitcherCoreSpec {
         _ = backspaceBuffer.record(.backspace)
         expect(backspaceBuffer.currentPhrase == "hello", "Typing buffer removes the last typed character on Backspace")
         expect(backspaceBuffer.currentWord == "hello", "Typing buffer restores the trailing word after deleting a boundary")
+        var lastWordBuffer = TypingBuffer()
+        for character in "ghbdtn " {
+            if character == " " {
+                _ = lastWordBuffer.record(.wordBoundary)
+                lastWordBuffer.appendBoundary(" ")
+            } else {
+                _ = lastWordBuffer.record(.character(character))
+            }
+        }
+        expect(lastWordBuffer.currentOrLastWord?.word == "ghbdtn", "Typing buffer returns the last completed word after a space")
+        expect(lastWordBuffer.currentOrLastWord?.trailingSuffix == " ", "Typing buffer keeps the suffix after the last completed word")
+        if let lastTypedWord = lastWordBuffer.currentOrLastWord {
+            lastWordBuffer.replaceLastTypedWord(lastTypedWord, with: "привет")
+        }
+        expect(lastWordBuffer.currentPhrase == "привет ", "Typing buffer replaces only the last completed word and preserves the suffix")
+        expect(lastWordBuffer.currentWord.isEmpty, "Typing buffer keeps current word empty after replacing a completed word")
 
         let phraseCorrector = PhraseCorrector()
         let englishPhrase = phraseCorrector.correction(

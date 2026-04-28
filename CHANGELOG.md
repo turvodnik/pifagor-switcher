@@ -2,6 +2,14 @@
 
 All notable changes to Pifagor Switcher are documented here.
 
+## v0.2.1 - 2026-04-28
+
+Manual last-word correction release.
+
+- Added double Option hotkey to correct only the current or last completed word.
+- Preserves the trailing space or punctuation suffix when correcting the last word after a boundary.
+- Keeps double Control for phrase correction and double Shift for selected text correction.
+
 ## v0.2.0 - 2026-04-28
 
 Reliability-focused live correction release.

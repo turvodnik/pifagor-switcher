@@ -16,6 +16,7 @@ final class TypingController {
         case doubleControl
         case manualCorrectSelection
         case manualCorrectCurrentWord
+        case manualCorrectLastWord
         case toggleEnabled
         case undoLastCorrection
     }
@@ -126,6 +127,9 @@ final class TypingController {
         case .manualCorrectCurrentWord:
             cancelPendingLiveCorrection(reason: "live cancelled by manual word correction")
             manualCorrectCurrentWord()
+        case .manualCorrectLastWord:
+            cancelPendingLiveCorrection(reason: "live cancelled by last word correction")
+            manualCorrectLastWord()
         case .toggleEnabled:
             cancelPendingLiveCorrection(reason: "live cancelled by pause toggle")
             toggleEnabled()
@@ -398,6 +402,23 @@ final class TypingController {
         forceManualCorrectionCurrentWord(word)
     }
 
+    private func manualCorrectLastWord() {
+        guard let lastTypedWord = buffer.currentOrLastWord else {
+            return
+        }
+
+        if let correction = attemptCorrection(
+            word: lastTypedWord.word,
+            trigger: .manual,
+            typedSuffix: lastTypedWord.trailingSuffix
+        ) {
+            buffer.replaceLastTypedWord(lastTypedWord, with: correction.replacement)
+            return
+        }
+
+        forceManualCorrectionLastWord(lastTypedWord)
+    }
+
     private func forceManualCorrectionCurrentWord(_ word: String) {
         let settings = settingsStore.state
         let context = currentTypingContext()
@@ -421,6 +442,43 @@ final class TypingController {
         _ = inputSourceManager.select(targetInputSource)
         textReplayer.replaceText(characterCount: correction.deleteLength, replacement: correction.insertedText)
         buffer.replaceCurrentWord(with: correction.replacement)
+        lastCorrection = correction
+        if settings.isAdaptiveLearningEnabled {
+            adaptiveLexiconStore.recordManualCorrection(
+                original: correction.original,
+                replacement: correction.replacement,
+                currentInputSource: currentInputSource
+            )
+        }
+
+        if settings.isVisualIndicatorEnabled {
+            indicator.show(text: targetInputSource.displayName)
+        }
+    }
+
+    private func forceManualCorrectionLastWord(_ lastTypedWord: LastTypedWord) {
+        let settings = settingsStore.state
+        let context = currentTypingContext()
+        guard settings.isEnabled,
+              safetyPolicy.allowsCorrection(in: context, settings: settings),
+              allowsCorrectionMode(trigger: .manual, settings: settings),
+              let currentInputSource = inputSourceManager.currentInputSource() else {
+            return
+        }
+
+        let targetInputSource: InputSource = currentInputSource == .english ? .russian : .english
+        guard let correction = correctionEngine.correction(
+            for: lastTypedWord.word,
+            currentInputSource: currentInputSource,
+            targetInputSource: targetInputSource,
+            typedSuffix: lastTypedWord.trailingSuffix
+        ) else {
+            return
+        }
+
+        _ = inputSourceManager.select(targetInputSource)
+        textReplayer.replaceText(characterCount: correction.deleteLength, replacement: correction.insertedText)
+        buffer.replaceLastTypedWord(lastTypedWord, with: correction.replacement)
         lastCorrection = correction
         if settings.isAdaptiveLearningEnabled {
             adaptiveLexiconStore.recordManualCorrection(

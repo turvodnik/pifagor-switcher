@@ -61,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Диагностика...", action: #selector(openDiagnostics), keyEquivalent: "d"))
         menu.addItem(NSMenuItem(title: "Сайт разработчика", action: #selector(openDeveloperWebsite), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Двойной Ctrl: исправить фразу", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Двойной Option: исправить последнее слово", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Пауза", action: #selector(toggleEnabled), keyEquivalent: "p"))
         menu.addItem(NSMenuItem(title: "Отменить исправление", action: #selector(undoLastCorrection), keyEquivalent: "z"))
         menu.addItem(NSMenuItem(title: "Исправить текущее слово: Ctrl+Option+C", action: nil, keyEquivalent: ""))
