@@ -11,6 +11,7 @@ public final class SettingsStore: @unchecked Sendable {
         public let isVisualIndicatorEnabled: Bool
         public let isSoundEnabled: Bool
         public let launchAtLogin: Bool
+        public let isLiveCorrectionEnabled: Bool
         public let isAdaptiveLearningEnabled: Bool
         public let onboardingCompleted: Bool
 
@@ -24,6 +25,7 @@ public final class SettingsStore: @unchecked Sendable {
             isVisualIndicatorEnabled: Bool,
             isSoundEnabled: Bool,
             launchAtLogin: Bool,
+            isLiveCorrectionEnabled: Bool = true,
             isAdaptiveLearningEnabled: Bool = true,
             onboardingCompleted: Bool = false
         ) {
@@ -36,6 +38,7 @@ public final class SettingsStore: @unchecked Sendable {
             self.isVisualIndicatorEnabled = isVisualIndicatorEnabled
             self.isSoundEnabled = isSoundEnabled
             self.launchAtLogin = launchAtLogin
+            self.isLiveCorrectionEnabled = isLiveCorrectionEnabled
             self.isAdaptiveLearningEnabled = isAdaptiveLearningEnabled
             self.onboardingCompleted = onboardingCompleted
         }
@@ -50,6 +53,7 @@ public final class SettingsStore: @unchecked Sendable {
             case isVisualIndicatorEnabled
             case isSoundEnabled
             case launchAtLogin
+            case isLiveCorrectionEnabled
             case isAdaptiveLearningEnabled
             case onboardingCompleted
         }
@@ -65,6 +69,7 @@ public final class SettingsStore: @unchecked Sendable {
             self.isVisualIndicatorEnabled = try container.decodeIfPresent(Bool.self, forKey: .isVisualIndicatorEnabled) ?? Self.defaults.isVisualIndicatorEnabled
             self.isSoundEnabled = try container.decodeIfPresent(Bool.self, forKey: .isSoundEnabled) ?? Self.defaults.isSoundEnabled
             self.launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? Self.defaults.launchAtLogin
+            self.isLiveCorrectionEnabled = try container.decodeIfPresent(Bool.self, forKey: .isLiveCorrectionEnabled) ?? Self.defaults.isLiveCorrectionEnabled
             self.isAdaptiveLearningEnabled = try container.decodeIfPresent(Bool.self, forKey: .isAdaptiveLearningEnabled) ?? Self.defaults.isAdaptiveLearningEnabled
             self.onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? Self.defaults.onboardingCompleted
         }
@@ -104,6 +109,7 @@ public final class SettingsStore: @unchecked Sendable {
             isVisualIndicatorEnabled: true,
             isSoundEnabled: false,
             launchAtLogin: false,
+            isLiveCorrectionEnabled: true,
             isAdaptiveLearningEnabled: true,
             onboardingCompleted: false
         )
@@ -121,6 +127,7 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: onboardingCompleted
             )
@@ -139,6 +146,7 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: onboardingCompleted
             )
@@ -157,6 +165,7 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: onboardingCompleted
             )
@@ -175,6 +184,7 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: onboardingCompleted
             )
@@ -191,6 +201,7 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: onboardingCompleted
             )
@@ -207,7 +218,25 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: enabled,
+                onboardingCompleted: onboardingCompleted
+            )
+        }
+
+        public func withLiveCorrectionEnabled(_ enabled: Bool) -> State {
+            State(
+                enabledInputSources: enabledInputSources,
+                appRules: appRules,
+                urlRules: urlRules,
+                appCorrectionModes: appCorrectionModes,
+                excludedAppBundleIdentifiers: excludedAppBundleIdentifiers,
+                isEnabled: isEnabled,
+                isVisualIndicatorEnabled: isVisualIndicatorEnabled,
+                isSoundEnabled: isSoundEnabled,
+                launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: enabled,
+                isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: onboardingCompleted
             )
         }
@@ -223,6 +252,7 @@ public final class SettingsStore: @unchecked Sendable {
                 isVisualIndicatorEnabled: isVisualIndicatorEnabled,
                 isSoundEnabled: isSoundEnabled,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: isLiveCorrectionEnabled,
                 isAdaptiveLearningEnabled: isAdaptiveLearningEnabled,
                 onboardingCompleted: completed
             )

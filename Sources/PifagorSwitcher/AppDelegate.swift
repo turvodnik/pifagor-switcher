@@ -139,6 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 frontmostApplication: frontmostBundleIdentifier,
                 correctionMode: AppRuleEngine(settings: settingsStore.state)
                     .correctionMode(for: frontmostBundleIdentifier),
+                liveCorrectionEnabled: settingsStore.state.isLiveCorrectionEnabled,
+                lastCorrectionSkipReason: controller?.lastCorrectionSkipReason ?? "-",
                 settingsEnabled: settingsStore.state.isEnabled,
                 conflictingApps: runningConflictingSwitchers()
             )

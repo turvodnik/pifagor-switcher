@@ -35,6 +35,21 @@ struct PifagorSwitcherCoreSpec {
         expect(russianIntent.confidence >= 0.80, "Detector confidence is high for ghbdtn")
         expect(russianIntent.shouldCorrect, "Detector corrects ghbdtn")
 
+        let liveRussianIntent = detector.detect(word: "ghb", currentInputSource: .english, trigger: .live)
+        expect(liveRussianIntent.targetInputSource == .russian, "Live detector targets Russian for high-confidence prefix ghb")
+        expect(liveRussianIntent.confidence >= 0.92, "Live detector requires high confidence for ghb")
+
+        let liveEnglishIntent = detector.detect(word: "руд", currentInputSource: .russian, trigger: .live)
+        expect(liveEnglishIntent.targetInputSource == .english, "Live detector targets English for high-confidence prefix руд")
+
+        expect(!detector.detect(word: "github", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips known English words")
+        expect(!detector.detect(word: "gith", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips prefixes of known English words")
+        expect(!detector.detect(word: "wp-admin", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips kebab-case technical tokens")
+        expect(!detector.detect(word: "user_id", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips snake_case technical tokens")
+        expect(!detector.detect(word: "https://pifagor.studio", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips URLs")
+        expect(!detector.detect(word: "hello@pifagor.studio", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips email-like tokens")
+        expect(!detector.detect(word: "/Users/test", currentInputSource: .english, trigger: .live).shouldCorrect, "Live detector skips paths")
+
         let englishIntent = detector.detect(word: "руддщ", currentInputSource: .russian)
         expect(englishIntent.targetInputSource == .english, "Detector targets English for руддщ")
         expect(englishIntent.confidence >= 0.80, "Detector confidence is high for руддщ")
@@ -148,6 +163,42 @@ struct PifagorSwitcherCoreSpec {
             AppRuleEngine(settings: modeSettings).correctionMode(for: "org.telegram.desktop") == .normal,
             "App correction mode can be overridden"
         )
+
+        let livePolicy = LiveCorrectionPolicy()
+        expect(SettingsStore.State.defaults.isLiveCorrectionEnabled, "Live correction is enabled by default")
+        expect(livePolicy.idleDelay == 0.16, "Live correction uses a 160ms idle delay")
+        expect(livePolicy.liveConfidenceThreshold == 0.92, "Live correction uses a high confidence threshold")
+        expect(
+            livePolicy.allowsLiveCorrection(
+                word: "ghb",
+                settings: .defaults,
+                correctionMode: .normal,
+                context: TypingContext(
+                    applicationBundleIdentifier: "com.apple.Notes",
+                    applicationName: "Notes",
+                    isSecureInputEnabled: false,
+                    focusedElementRole: nil
+                )
+            ),
+            "Live policy allows safe normal apps"
+        )
+        expect(
+            !livePolicy.allowsLiveCorrection(
+                word: "ghb",
+                settings: .defaults,
+                correctionMode: .manualOnly,
+                context: TypingContext(
+                    applicationBundleIdentifier: "com.microsoft.VSCode",
+                    applicationName: "Visual Studio Code",
+                    isSecureInputEnabled: false,
+                    focusedElementRole: nil
+                )
+            ),
+            "Live policy blocks manual-only apps"
+        )
+        expect(livePolicy.cancelsPendingLiveCorrection(on: .wordBoundary), "Live policy cancels on word boundary")
+        expect(livePolicy.cancelsPendingLiveCorrection(on: .backspace), "Live policy cancels on Backspace")
+        expect(livePolicy.cancelsPendingLiveCorrection(on: .cursorMoved), "Live policy cancels on cursor movement")
 
         let urlEngine = URLRuleEngine(rules: SettingsStore.State.defaultURLRules)
         expect(

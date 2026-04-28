@@ -14,7 +14,8 @@ public struct DetectionResult: Equatable, Sendable {
 
 public struct LanguageDetector: Sendable {
     private let minimumLength = 3
-    private let correctionThreshold = 0.80
+    private let boundaryCorrectionThreshold = 0.80
+    private let liveCorrectionThreshold = 0.92
     private let adaptiveLexicon: AdaptiveLexiconSnapshot
 
     private let commonRussianWords: Set<String> = [
@@ -66,7 +67,7 @@ public struct LanguageDetector: Sendable {
         "delete", "deleted", "close", "closed", "fix", "fixed", "correct", "correction",
         "paste", "copy", "notes", "textedit", "browser", "terminal", "settings", "access",
         "permission", "monitoring", "english", "russian", "fast", "smart", "local",
-        "wordpress", "claude", "github", "openai", "chatgpt", "google", "chrome",
+        "wordpress", "claude", "github", "git", "openai", "chatgpt", "google", "chrome",
         "safari", "vscode", "cursor", "xcode", "swiftui", "macos", "linux", "docker",
         "api", "json", "http", "https", "url", "true", "false", "null"
     ]
@@ -92,11 +93,21 @@ public struct LanguageDetector: Sendable {
         self.adaptiveLexicon = adaptiveLexicon
     }
 
-    public func detect(word: String, currentInputSource: InputSource) -> DetectionResult {
+    public func detect(
+        word: String,
+        currentInputSource: InputSource,
+        trigger: CorrectionTrigger = .wordBoundary
+    ) -> DetectionResult {
         guard isStructurallyCandidate(word) else {
             return .noCorrection
         }
-        if adaptiveLexicon.isIgnored(word) || adaptiveLexicon.isKnown(word, as: currentInputSource) {
+        if adaptiveLexicon.isIgnored(word)
+            || adaptiveLexicon.isKnown(word, as: currentInputSource)
+            || isKnownWord(word, as: currentInputSource) {
+            return .noCorrection
+        }
+
+        if trigger == .live, isKnownPrefix(word, as: currentInputSource) {
             return .noCorrection
         }
 
@@ -119,8 +130,9 @@ public struct LanguageDetector: Sendable {
         }
 
         let confidence = score(converted, as: target)
+        let threshold = trigger == .live ? liveCorrectionThreshold : boundaryCorrectionThreshold
 
-        guard confidence >= correctionThreshold else {
+        guard confidence >= threshold else {
             return .noCorrection
         }
 
@@ -134,6 +146,10 @@ public struct LanguageDetector: Sendable {
     private func isStructurallyCandidate(_ word: String) -> Bool {
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            return false
+        }
+
+        if isProtectedTechnicalToken(trimmed) {
             return false
         }
 
@@ -161,6 +177,66 @@ public struct LanguageDetector: Sendable {
                 || professionalEnglishWords.contains(normalized)
                 || adaptiveLexicon.isKnown(normalized, as: .english)
         }
+    }
+
+    private func isKnownPrefix(_ word: String, as source: InputSource) -> Bool {
+        let normalized = word.lowercased()
+        guard normalized.count >= minimumLength else {
+            return false
+        }
+
+        return knownWords(as: source).contains { known in
+            known.hasPrefix(normalized)
+        }
+    }
+
+    private func knownWords(as source: InputSource) -> Set<String> {
+        switch source {
+        case .russian:
+            return commonRussianWords
+                .union(professionalRussianWords)
+                .union(adaptiveLexicon.customDomainWords.filter { word in
+                    word.range(of: #"[а-яё]"#, options: .regularExpression) != nil
+                })
+        case .english:
+            return commonEnglishWords
+                .union(professionalEnglishWords)
+                .union(adaptiveLexicon.customDomainWords.filter { word in
+                    word.range(of: #"[a-z]"#, options: [.regularExpression, .caseInsensitive]) != nil
+                })
+        }
+    }
+
+    private func isProtectedTechnicalToken(_ word: String) -> Bool {
+        if word.contains("://")
+            || word.hasPrefix("www.")
+            || word.contains("@")
+            || word.contains("/")
+            || word.contains("\\")
+            || word.contains("_") {
+            return true
+        }
+
+        if word.count > 1, word == word.uppercased(), word != word.lowercased() {
+            return true
+        }
+
+        let characters = Array(word)
+        if characters.dropFirst().contains(where: { character in
+            let string = String(character)
+            return string == string.uppercased() && string != string.lowercased()
+        }) {
+            return true
+        }
+
+        if word.contains("-") {
+            let asciiLettersAndHyphen = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-")
+            if word.unicodeScalars.allSatisfy({ asciiLettersAndHyphen.contains($0) }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func score(_ word: String, as source: InputSource) -> Double {

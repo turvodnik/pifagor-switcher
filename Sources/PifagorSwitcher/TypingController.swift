@@ -25,6 +25,7 @@ final class TypingController {
     private let inputSourceManager: InputSourceManager
     private let correctionEngine = CorrectionEngine()
     private let capitalizationCorrector = CapitalizationCorrector()
+    private let liveCorrectionPolicy = LiveCorrectionPolicy()
     private let safetyPolicy = SafetyPolicy()
     private let indicator: InputSourceIndicator
     private let textReplayer: TextReplayer
@@ -34,6 +35,9 @@ final class TypingController {
     private var buffer = TypingBuffer()
     private var lastCorrection: TextCorrection?
     private var recentRejectedCorrection: TextCorrection?
+    private var liveCorrectionWorkItem: DispatchWorkItem?
+    private var liveCorrectionGeneration: Int = 0
+    private(set) var lastCorrectionSkipReason: String = "-"
 
     init(
         settingsStore: SettingsStore,
@@ -63,9 +67,12 @@ final class TypingController {
     func handle(_ event: Event) {
         switch event {
         case .character(let character):
+            cancelPendingLiveCorrection()
             lastCorrection = nil
             _ = buffer.record(.character(character))
+            scheduleLiveCorrectionIfNeeded()
         case .wordBoundary(let typedSuffix):
+            cancelPendingLiveCorrection(reason: "live cancelled by word boundary")
             applyContextRuleIfNeeded()
             if let word = buffer.record(.wordBoundary) {
                 if let correction = attemptCorrection(word: word, trigger: .wordBoundary, typedSuffix: typedSuffix) {
@@ -83,36 +90,47 @@ final class TypingController {
                 buffer.appendBoundary(typedSuffix)
             }
         case .backspace:
+            cancelPendingLiveCorrection(reason: "live cancelled by Backspace")
             rejectLastCorrectionIfBackspacingAtCursor()
             lastCorrection = nil
             _ = buffer.record(.backspace)
         case .enter:
+            cancelPendingLiveCorrection(reason: "live cancelled by Enter")
             lastCorrection = nil
             _ = buffer.record(.enter)
         case .escape:
+            cancelPendingLiveCorrection(reason: "live cancelled by Escape")
             lastCorrection = nil
             _ = buffer.record(.escape)
         case .appChanged:
+            cancelPendingLiveCorrection(reason: "live cancelled by app change")
             lastCorrection = nil
             _ = buffer.record(.appChanged)
             applyContextRuleIfNeeded()
         case .cursorMoved:
+            cancelPendingLiveCorrection(reason: "live cancelled by cursor movement")
             lastCorrection = nil
             _ = buffer.record(.cursorMoved)
             applyContextRuleIfNeeded()
         case .manualSwitch:
+            cancelPendingLiveCorrection(reason: "live cancelled by manual switch")
             manualSwitch()
         case .doubleControl:
+            cancelPendingLiveCorrection(reason: "live cancelled by manual correction")
             manualCorrectPreviousTextOrSwitch()
         case .manualCorrectSelection:
+            cancelPendingLiveCorrection(reason: "live cancelled by selected text correction")
             if !manualCorrectSelectedText() {
                 manualCorrectPreviousTextOrSwitch()
             }
         case .manualCorrectCurrentWord:
+            cancelPendingLiveCorrection(reason: "live cancelled by manual word correction")
             manualCorrectCurrentWord()
         case .toggleEnabled:
+            cancelPendingLiveCorrection(reason: "live cancelled by pause toggle")
             toggleEnabled()
         case .undoLastCorrection:
+            cancelPendingLiveCorrection(reason: "live cancelled by undo")
             undoLastCorrection()
         }
     }
@@ -136,20 +154,31 @@ final class TypingController {
     @discardableResult
     private func attemptCorrection(word: String, trigger: CorrectionTrigger, typedSuffix: String) -> TextCorrection? {
         guard correctionEngine.shouldAttemptCorrection(trigger: trigger) else {
+            lastCorrectionSkipReason = "\(trigger) correction disabled for trigger"
             return nil
         }
 
         let settings = settingsStore.state
         let context = currentTypingContext()
-        guard settings.isEnabled,
-              safetyPolicy.allowsCorrection(in: context, settings: settings),
-              allowsCorrectionMode(trigger: trigger, settings: settings),
-              let currentInputSource = inputSourceManager.currentInputSource() else {
+        guard settings.isEnabled else {
+            lastCorrectionSkipReason = "switcher disabled"
+            return nil
+        }
+        guard safetyPolicy.allowsCorrection(in: context, settings: settings) else {
+            lastCorrectionSkipReason = "blocked by safety policy"
+            return nil
+        }
+        guard allowsCorrectionMode(trigger: trigger, settings: settings) else {
+            lastCorrectionSkipReason = "blocked by app correction mode"
+            return nil
+        }
+        guard let currentInputSource = inputSourceManager.currentInputSource() else {
+            lastCorrectionSkipReason = "unknown input source"
             return nil
         }
 
         let detector = LanguageDetector(adaptiveLexicon: adaptiveSnapshot(for: settings))
-        let result = detector.detect(word: word, currentInputSource: currentInputSource)
+        let result = detector.detect(word: word, currentInputSource: currentInputSource, trigger: trigger)
         guard result.shouldCorrect, let targetInputSource = result.targetInputSource,
               let correction = correctionEngine.correction(
                 for: word,
@@ -157,12 +186,14 @@ final class TypingController {
                 targetInputSource: targetInputSource,
                 typedSuffix: typedSuffix
             ) else {
+            lastCorrectionSkipReason = "\(trigger) confidence too low or protected token"
             return nil
         }
 
         _ = inputSourceManager.select(targetInputSource)
         textReplayer.replaceText(characterCount: correction.deleteLength, replacement: correction.insertedText)
         lastCorrection = correction
+        lastCorrectionSkipReason = "corrected \(trigger)"
         if trigger == .manual, settings.isAdaptiveLearningEnabled {
             adaptiveLexiconStore.recordManualCorrection(
                 original: correction.original,
@@ -179,6 +210,95 @@ final class TypingController {
         }
 
         return correction
+    }
+
+    private func scheduleLiveCorrectionIfNeeded() {
+        let word = buffer.currentWord
+        let settings = settingsStore.state
+        let context = currentTypingContext()
+        let mode = currentCorrectionMode(settings: settings)
+
+        guard liveCorrectionPolicy.allowsLiveCorrection(
+            word: word,
+            settings: settings,
+            correctionMode: mode,
+            context: context
+        ) else {
+            lastCorrectionSkipReason = liveCorrectionSkipReason(
+                word: word,
+                settings: settings,
+                correctionMode: mode,
+                context: context
+            )
+            return
+        }
+
+        liveCorrectionGeneration += 1
+        let generation = liveCorrectionGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.performLiveCorrection(expectedWord: word, generation: generation)
+        }
+        liveCorrectionWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + liveCorrectionPolicy.idleDelay,
+            execute: workItem
+        )
+    }
+
+    private func performLiveCorrection(expectedWord: String, generation: Int) {
+        guard generation == liveCorrectionGeneration else {
+            return
+        }
+
+        liveCorrectionWorkItem = nil
+        guard buffer.currentWord == expectedWord else {
+            lastCorrectionSkipReason = "live skipped stale word"
+            return
+        }
+
+        guard let correction = attemptCorrection(word: expectedWord, trigger: .live, typedSuffix: "") else {
+            return
+        }
+
+        buffer.replaceCurrentWord(with: correction.replacement)
+    }
+
+    private func cancelPendingLiveCorrection(reason: String? = nil) {
+        guard liveCorrectionWorkItem != nil else {
+            return
+        }
+
+        liveCorrectionWorkItem?.cancel()
+        liveCorrectionWorkItem = nil
+        liveCorrectionGeneration += 1
+        if let reason {
+            lastCorrectionSkipReason = reason
+        }
+    }
+
+    private func liveCorrectionSkipReason(
+        word: String,
+        settings: SettingsStore.State,
+        correctionMode: AppCorrectionMode,
+        context: TypingContext
+    ) -> String {
+        if !settings.isEnabled {
+            return "live skipped: switcher disabled"
+        }
+        if !settings.isLiveCorrectionEnabled {
+            return "live skipped: disabled in settings"
+        }
+        if correctionMode != .normal {
+            return "live skipped: app mode \(correctionMode.rawValue)"
+        }
+        if word.count < 3 {
+            return "live skipped: word shorter than 3"
+        }
+        if !safetyPolicy.allowsCorrection(in: context, settings: settings) {
+            return "live skipped: blocked by safety policy"
+        }
+
+        return "live skipped"
     }
 
     private func applyContextRuleIfNeeded() {
@@ -422,8 +542,7 @@ final class TypingController {
     }
 
     private func allowsCorrectionMode(trigger: CorrectionTrigger, settings: SettingsStore.State) -> Bool {
-        let mode = AppRuleEngine(settings: settings)
-            .correctionMode(for: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        let mode = currentCorrectionMode(settings: settings)
 
         switch mode {
         case .normal:
@@ -433,6 +552,11 @@ final class TypingController {
         case .disabled:
             return false
         }
+    }
+
+    private func currentCorrectionMode(settings: SettingsStore.State) -> AppCorrectionMode {
+        AppRuleEngine(settings: settings)
+            .correctionMode(for: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     }
 
     private func rejectLastCorrectionIfBackspacingAtCursor() {

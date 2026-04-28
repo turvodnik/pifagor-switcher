@@ -1,6 +1,7 @@
 import Foundation
 
 public enum CorrectionTrigger: Equatable, Sendable {
+    case live
     case wordBoundary
     case punctuation
     case manual
@@ -43,7 +44,7 @@ public struct CorrectionEngine: Sendable {
 
     public func shouldAttemptCorrection(trigger: CorrectionTrigger) -> Bool {
         switch trigger {
-        case .wordBoundary, .punctuation, .manual:
+        case .live, .wordBoundary, .punctuation, .manual:
             return true
         case .enter, .escape:
             return false

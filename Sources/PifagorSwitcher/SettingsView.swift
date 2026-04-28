@@ -10,6 +10,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var visualIndicator: Bool
     @Published var sound: Bool
     @Published var launchAtLogin: Bool
+    @Published var liveCorrection: Bool
     @Published var adaptiveLearning: Bool
     @Published var excludedAppsText: String
     @Published var customDomainWordsText: String
@@ -30,6 +31,7 @@ final class SettingsViewModel: ObservableObject {
         visualIndicator = state.isVisualIndicatorEnabled
         sound = state.isSoundEnabled
         launchAtLogin = state.launchAtLogin
+        liveCorrection = state.isLiveCorrectionEnabled
         adaptiveLearning = state.isAdaptiveLearningEnabled
         excludedAppsText = state.excludedAppBundleIdentifiers.sorted().joined(separator: "\n")
         customDomainWordsText = adaptiveLexiconStore.snapshot.customDomainWords.sorted().joined(separator: "\n")
@@ -57,6 +59,7 @@ final class SettingsViewModel: ObservableObject {
                 isVisualIndicatorEnabled: visualIndicator,
                 isSoundEnabled: sound,
                 launchAtLogin: launchAtLogin,
+                isLiveCorrectionEnabled: liveCorrection,
                 isAdaptiveLearningEnabled: adaptiveLearning,
                 onboardingCompleted: state.onboardingCompleted
             )
@@ -209,6 +212,7 @@ struct SettingsView: View {
             Toggle("Показывать индикатор", isOn: $viewModel.visualIndicator)
             Toggle("Звук при исправлении", isOn: $viewModel.sound)
             Toggle("Запускать при входе в систему", isOn: $viewModel.launchAtLogin)
+            Toggle("Live-автоисправление после короткой паузы", isOn: $viewModel.liveCorrection)
             Toggle("Самообучение", isOn: $viewModel.adaptiveLearning)
 
             VStack(alignment: .leading, spacing: 8) {

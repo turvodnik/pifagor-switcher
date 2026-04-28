@@ -11,6 +11,8 @@ struct Diagnostics {
     let currentInputSource: InputSource?
     let frontmostApplication: String
     let correctionMode: AppCorrectionMode
+    let liveCorrectionEnabled: Bool
+    let lastCorrectionSkipReason: String
     let settingsEnabled: Bool
     let conflictingApps: [String]
 
@@ -25,6 +27,8 @@ struct Diagnostics {
             "Current input source: \(currentInputSource?.displayName ?? "unknown")",
             "Frontmost app: \(frontmostApplication)",
             "Correction mode: \(correctionMode.displayName) (\(correctionMode.rawValue))",
+            "Live correction: \(liveCorrectionEnabled ? "YES" : "NO")",
+            "Last correction skip: \(lastCorrectionSkipReason)",
             "Switcher enabled: \(settingsEnabled ? "YES" : "NO")",
             "Conflicting switchers: \(conflictingApps.isEmpty ? "-" : conflictingApps.joined(separator: ", "))",
             "",
